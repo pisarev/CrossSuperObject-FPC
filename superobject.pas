@@ -89,7 +89,10 @@
 {$ifend}
 
 {$if defined(VER230) or defined(VER240)  or defined(VER250) or
-     defined(VER260) or defined(VER270)  or defined(VER280)}
+     defined(VER260) or defined(VER270)  or defined(VER280) or
+     defined(VER290) or defined(VER300)  or defined(VER310) or
+     defined(VER320) or defined(VER330)  or defined(VER340) or
+     defined(VER350) or defined(VER360)}
   {$define VER210ORGREATER}
   {$define VER230ORGREATER}
 {$ifend}
@@ -632,12 +635,14 @@ type
     procedure SetDataPtr(const Value: Pointer);
   protected
 {$IFDEF FPC}
-    function QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid: tguid; out obj): longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function QueryInterface(constref IID: TGUID; out Obj): HResult; {$IFNDEF windows}cdecl{$ELSE}stdcall{$ENDIF}; {$IFDEF FPC}virtual{$ELSE}override{$ENDIF};
+    function _AddRef: Integer; {$IFNDEF windows}cdecl{$ELSE}stdcall{$ENDIF}; {$IFDEF FPC}virtual{$ELSE}override{$ENDIF};
+    function _Release: Integer; {$IFNDEF windows}cdecl{$ELSE}stdcall{$ENDIF}; {$IFDEF FPC}virtual{$ELSE}override{$ENDIF};
 {$ELSE}
     function QueryInterface(const IID: TGUID; out Obj): HResult; virtual; stdcall;
-{$ENDIF}
     function _AddRef: Integer; virtual; stdcall;
     function _Release: Integer; virtual; stdcall;
+{$ENDIF}
 
     function GetO(const path: SOString): ISuperObject;
     procedure PutO(const path: SOString; const Value: ISuperObject);
@@ -835,9 +840,19 @@ function SOInvoke(const obj: TValue; const method: string; const params: ISuperO
 function SOInvoke(const obj: TValue; const method: string; const params: string; ctx: TSuperRttiContext = nil): ISuperObject; overload;
 {$ENDIF}
 
+{$IFDEF UNIX}
+function JavaToDelphiDateTime(const dt: int64): TDateTime;
+function DelphiToJavaDateTime(const dt: TDateTime): int64;
+{$ENDIF}
+
 implementation
 uses
-  sysutils, Windows, superdate
+  sysutils, Windows
+{$IFDEF UNIX}
+  ,DateUtils
+{$ELSE}
+  ,superdate
+{$ENDIF}
 {$IFDEF FPC}
   ,sockets
 {$ELSE}
@@ -988,6 +1003,7 @@ begin
 end;
 
 function TryObjectToDate(const obj: ISuperObject; var dt: TDateTime): Boolean;
+{$IFDEF WINDOWS}
 var
   i: Int64;
 begin
@@ -1009,6 +1025,20 @@ begin
   else
     Result := False;
   end;
+{$ELSE}
+begin
+  case ObjectGetType(obj) of
+  stInt:
+    begin
+      dt := JavaToDelphiDateTime(obj.AsInteger);
+      Result := True;
+    end;
+  stString:
+    Result := TryStrToDateTime(obj.AsString, dt);
+  else
+    Result := False;
+  end;
+{$ENDIF}
 end;
 
 function SO(const s: SOString): ISuperObject; overload;
@@ -1656,6 +1686,50 @@ begin
   end;
 end;
 
+{$ENDIF}
+
+{$IFDEF UNIX}
+type
+  ptm = ^tm;
+  tm = record
+    tm_sec: Integer;		(* Seconds: 0-59 (K&R says 0-61?) *)
+    tm_min: Integer;		(* Minutes: 0-59 *)
+    tm_hour: Integer;	(* Hours since midnight: 0-23 *)
+    tm_mday: Integer;	(* Day of the month: 1-31 *)
+    tm_mon: Integer;		(* Months *since* january: 0-11 *)
+    tm_year: Integer;	(* Years since 1900 *)
+    tm_wday: Integer;	(* Days since Sunday (0-6) *)
+    tm_yday: Integer;	(* Days since Jan. 1: 0-365 *)
+    tm_isdst: Integer;	(* +1 Daylight Savings Time, 0 No DST, -1 don't know *)
+  end;
+
+function mktime(p: ptm): LongInt; cdecl; external;
+function gmtime(const t: PLongint): ptm; cdecl; external;
+function localtime (const t: PLongint): ptm; cdecl; external;
+
+function JavaToDelphiDateTime(const dt: int64): TDateTime;
+var
+  p: ptm;
+  l, ms: Integer;
+begin
+  l := dt div 1000;
+  ms := dt mod 1000;
+  p := gmtime(@l);
+  Result := EncodeDateTime(p^.tm_year+1900, p^.tm_mon+1, p^.tm_mday, p^.tm_hour, p^.tm_min, p^.tm_sec, ms);
+end;
+
+function DelphiToJavaDateTime(const dt: TDateTime): Int64;
+var
+  p: ptm;
+  l, ms: Integer;
+  v: Int64;
+begin
+  v := Round((dt - 25569) * 86400000);
+  ms := v mod 1000;
+  l := v div 1000;
+  p := localtime(@l);
+  Result := Int64(mktime(p)) * 1000 + ms;
+end;
 {$ENDIF}
 
 { TSuperEnumerator }
@@ -3268,9 +3342,8 @@ begin
   ParseString(PSOChar(path), true, False, self, [foCreatePath, foPutValue], TSuperObject.Create(Value));
 end;
 
-
 {$IFDEF FPC}
-function TSuperObject.QueryInterface({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} iid: tguid; out obj): longint;{$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+function TSuperObject.QueryInterface(constref IID: TGUID; out Obj): HResult; {$IFNDEF windows}cdecl{$ELSE}stdcall{$ENDIF};
 {$ELSE}
 function TSuperObject.QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
 {$ENDIF}
@@ -4235,12 +4308,20 @@ begin
   end;
 end;
 
+{$IFDEF FPC}
+function TSuperObject._AddRef: Integer; {$IFNDEF windows}cdecl{$ELSE}stdcall{$ENDIF};
+{$ELSE}
 function TSuperObject._AddRef: Integer; stdcall;
+{$ENDIF}
 begin
   Result := InterlockedIncrement(FRefCount);
 end;
 
+{$IFDEF FPC}
+function TSuperObject._Release: Integer; {$IFNDEF windows}cdecl{$ELSE}stdcall{$ENDIF};
+{$ELSE}
 function TSuperObject._Release: Integer; stdcall;
+{$ENDIF}
 begin
   Result := InterlockedDecrement(FRefCount);
   if Result = 0 then
@@ -6320,9 +6401,11 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
   procedure FromInterface;
   const soguid: TGuid = '{4B86A9E3-E094-4E5A-954A-69048B7B6327}';
   var
+    Guid: TGuid;
     o: ISuperObject;
   begin
-    if CompareMem(@GetTypeData(TypeInfo).Guid, @soguid, SizeOf(TGUID)) then
+    Guid := GetTypeData(TypeInfo).Guid;
+    if CompareMem(@Guid, @soguid, SizeOf(TGUID)) then
     begin
       if obj <> nil then
         TValue.Make(@obj, TypeInfo, Value) else

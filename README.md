@@ -1,218 +1,59 @@
-## This project is not maintained!
+# CrossSuperObject-FPC
 
-# SuperObject
+> Cross‑platform **fork** of the classic *SuperObject* JSON toolkit, adapted for modern Delphi versions and FreePascal on Windows and Linux.
 
-## What is JSON ?
+## Why this fork?
 
-- JSON (JavaScript Object Notation) is a lightweight data-interchange format.
-- It is easy for humans to read and write.
-- It is easy for machines to parse and generate.
-- It is based on a subset of the JavaScript Programming Language, Standard ECMA-262 3rd Edition - December 1999.
-- JSON is a text format that is completely language independent but uses conventions that are familiar to programmers.
-- These properties make JSON an ideal data-interchange language.
-- You can get more informations on [json.org](http://www.json.org).
+The original SuperObject (by Henri Gourvest) targets Delphi 7‑XE and Windows‐only RTL.  
+This fork updates the code base so that it compiles **out of the box** with:
 
-```js
-{
-  "name": "Jon Snow", /* this is a comment */
-  "dead": true,
-  "telephones": ["000000000", "111111111111"],
-  "age": 33,
-  "size": 1.83,
-  "adresses": [
-    {
-      "adress": "foo",
-      "city": "The wall",
-      "pc": 57000
-    },
-    {
-      "adress": "foo",
-      "city": "Winterfell",
-      "pc": 44000
-    }
-  ]
-}
+* **FreePascal ≥ 3.2** (FPC mode Delphi) on Windows & Linux x86‑64  
+* **Delphi XE2 … 11** (up to `VER340`)  
+* 32‑bit and 64‑bit targets
+
+## What was changed
+| Area | Change |
+|------|--------|
+| **FPC compatibility** | Added `{$IFDEF FPC}{$MODE DELPHI}{$ENDIF}` to every unit; replaced Win-API specific types with RTL equivalents. |
+| **Cross-platform API** | Wrapped Windows-only functions (`GetTickCount64`, `SetDynamicTimeZoneInformation`, etc.) in `{$IFDEF MSWINDOWS}`; introduced Unix implementations where feasible. |
+| **Unicode / RTL** | Removed hard-wired `AnsiString` in favour of `UnicodeString` / `UTF8String` under FPC; fixed code-page warnings. |
+| **Conditional Defines** | Added support for Delphi XE3–11 (`VER290..VER340`). |
+| **Bug-fixes** | Fixed several compiler hints, range-check warnings and an overflow in `jsonInt` when using FPC 64-bit. All patches enumerated in [`PATCHES.md`](PATCHES.md). |
+
+*(See `git log` for detailed per-file diffs.)*
+
+## Getting started
+
+### Delphi / Windows
 
 ```
-## Parsing a JSON data structure
-
-```pas
-var
-  obj: ISuperObject;
-begin
-  obj := SO('{"foo": true}');
-  obj := TSuperObject.ParseString('{"foo": true}');
-  obj := TSuperObject.ParseStream(stream);
-  obj := TSuperObject.ParseFile(FileName);
-end;
+git clone https://github.com/YOUR_USERNAME/CrossSuperObject-FPC.git
+dcc32 demo.dpr  // or open in IDE and Build
 ```
 
-## Accessing data
+### FreePascal / Linux
 
-There isn't individual datastructure for each supported data types.
-They are all an object: the ISuperObject.
-
-```pas
-  val := obj.AsString;
-  val := obj.AsInteger;
-  val := obj.AsBoolean;
-  val := obj.AsDouble;
-  val := obj.AsArray;
-  val := obj.AsObject;
-  val := obj.AsMethod;
+```
+git clone https://github.com/YOUR_USERNAME/CrossSuperObject-FPC.git
+fpc -MDelphi -S2 -O2 -B src/superobject.pas
 ```
 
-## How to read a property value of an object ?
+No extra defines are required.
 
-```pas
-  val := obj.AsObject.S['foo']; // get a string
-  val := obj.AsObject.I['foo']; // get an Int64
-  val := obj.AsObject.B['foo']; // get a Boolean
-  val := obj.AsObject.D['foo']; // get a Double
-  val := obj.AsObject.O['foo']; // get an Object (default)
-  val := obj.AsObject.M['foo']; // get a Method
-  val := obj.AsObject.N['foo']; // get a null object
-```
+## Versioning
 
-## How to read a value from an array ?
+Tags follow the original numbering plus suffix **`-fpc`**.
 
-```pas
-  // the advanced way
-  val := obj.AsArray.S[0]; // get a string
-  val := obj.AsArray.I[0]; // get an Int64
-  val := obj.AsArray.B[0]; // get a Boolean
-  val := obj.AsArray.D[0]; // get a Double
-  val := obj.AsArray.O[0]; // get an Object (default)
-  val := obj.AsArray.M[0]; // get a Method
-  val := obj.AsArray.N[0]; // get a null object
-```
+| Upstream | This fork |
+|----------|-----------|
+| 1.2.2    | **1.2.2-fpc** |
+| 1.2.3    | 1.2.3-fpc (planned) |
 
-## Using paths
+## License
 
-Using paths is a very productive method to find an object when you know where is it.
-This is some usage cases:
+SuperObject is dual-licensed **MPL 1.1 / LGPL**. This fork keeps the same license.  
+See original header and `LICENSE.superobject`.
 
-```pas
-  obj['foo']; // get a property
-  obj['123']; // get an item array
-  obj['foo.list']; // get a property from an object
-  obj['foo[123]']; // get an item array from an object
-  obj['foo(1,2,3)']; // call a method
-  obj['foo[]'] := value; // add an item array
-```
+---
 
-you also can encapsulate paths:
-
-```pas
-  obj := so('{"index": 1, "items": ["item 1", "item 2", "item 3"]}');
-  obj['items[index]'] // return "item 2"
-```
-
-or recreate a new data structure from another:
-
-```pas
-  obj := so('{"index": 1, "items": ["item 1", "item 2", "item 3"]}');
-  obj['{"item": items[index], "index": index}'] // return {"item": "item 2", "index": 1}
-```
-
-## Browsing data structure
-### Using Delphi enumerator.
-
-Using Delphi enumerator you can browse item's array or property's object value in the same maner.
-
-```pas
-var
-  item: ISuperObject;
-begin
-  for item in obj['items'] do ...
-```
-
-you can also browse the keys and values of an object like this:
-
-```pas
-var
-  item: TSuperAvlEntry;
-begin
-  for item in obj.AsObject do ...
-  begin
-    item.Name;
-    item.Value;
-  end;
-```
-
-### Browsing object properties without enumerator
-
-```pas
-var
-  item: TSuperObjectIter;
-begin
-  if ObjectFindFirst(obj, item) then
-  repeat
-    item.key;
-    item.val;
-  until not ObjectFindNext(item);
-  ObjectFindClose(item);
-```
-
-### Browsing array items without enumerator
-
-```pas
-var
-  item: Integer;
-begin
-  for item := 0 to obj.AsArray.Length - 1 do
-    obj.AsArray[item]
-```
-
-## RTTI & marshalling in Delphi 2010
-
-```pas
-type
-  TData = record
-    str: string;
-    int: Integer;
-    bool: Boolean;
-    flt: Double;
-  end;
-var
-  ctx: TSuperRttiContext;
-  data: TData;
-  obj: ISuperObject;
-begin
-  ctx := TSuperRttiContext.Create;
-  try
-    data := ctx.AsType<TData>(SO('{str: "foo", int: 123, bool: true, flt: 1.23}'));
-    obj := ctx.AsJson<TData>(data);
-  finally
-    ctx.Free;
-  end;
-end;
-```
-
-## Saving data
-
-```pas
-  obj.AsJSon(options);
-  obj.SaveTo(stream);
-  obj.SaveTo(filename);
-```
-
-## Helpers
-
-```pas
-  SO(['prop1', true, 'prop2', 123]); // return an object {"prop1": true, "prop2": 123}
-  SA([true, 123]); // return an array [true, 123]
-```
-
-## Non canonical forms
-
-The SuperObject is able to parse non canonical forms.
-
-```pas
-// unquoted identifiers
-SO('{foo: true}');
-// unescaped or unquoted strings
-SO('{собственность: bla bla bla}');
-// excadecimal
-SO('{foo: \xFF}');
-```
+Maintained by Yuriy Pisarev — patches welcome!
