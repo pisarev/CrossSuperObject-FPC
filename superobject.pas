@@ -847,7 +847,7 @@ function DelphiToJavaDateTime(const dt: TDateTime): int64;
 
 implementation
 uses
-  sysutils, Windows
+  sysutils{$IFDEF MSWINDOWS}, Windows{$ENDIF}
 {$IFDEF UNIX}
   ,DateUtils
 {$ELSE}
